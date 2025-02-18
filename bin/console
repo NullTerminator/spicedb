@@ -4,8 +4,64 @@
 require "bundler/setup"
 require "spicedb"
 
-# You can add fixtures and/or initialization code here to make experimenting
-# with your gem easier. You can also use a different console, if you like.
+require 'spicedb/management'
+
+Spicedb.configure do |c|
+  c.url = "localhost:50051"
+  c.token = "somerandomkeyhere"
+
+  c.permission_map = {
+    oranization_management: [:create, :update, :delete],
+    legal_request: [:create, :read, :update, :delete]
+  }
+end
+
+LegalRequest = Struct.new(:id)
+legal_request = LegalRequest.new('req_1')
+
+Spicedb::Management.write_schema
+
+begin
+  Spicedb::Management.create_role('org_1', 'admin')
+  Spicedb::Management.create_role('org_1', 'viewer')
+
+  Spicedb::Management.create_group('org_1', 'east')
+
+  # Admin perms
+  Spicedb::Management.add_permission_to_role('org_1', 'legal_request', 'create', 'admin')
+  Spicedb::Management.add_permission_to_role('org_1', 'legal_request', 'read', 'admin')
+  Spicedb::Management.add_permission_to_role('org_1', 'legal_request', 'update', 'admin')
+  Spicedb::Management.add_permission_to_role('org_1', 'legal_request', 'delete', 'admin')
+
+  # Viewer perms
+  Spicedb::Management.add_permission_to_role('org_1', 'legal_request', 'read', 'viewer')
+
+  # Users
+  Spicedb::Management.add_role_to_user('admin', 'linda')
+  Spicedb::Management.add_role_to_user('admin', 'jane')
+  Spicedb::Management.add_role_to_user('viewer', 'sam')
+
+  Spicedb::Management.add_user_to_group('jane', 'east')
+
+  Spicedb.add_record('org_1', legal_request)
+
+  # Grant access to the east group
+  Spicedb.add_access_to_record(legal_request, group_id: 'east')
+  Spicedb.add_access_to_record(legal_request, user_id: 'linda')
+rescue StandardError => e
+  #puts "ERROR: #{e}"
+end
+
+puts "CAN LINDA UPDATE?: #{Spicedb.has_permission?(legal_request, 'update', 'linda') ? 'YES' : 'no'}"
+puts "CAN JANE UPDATE?: #{Spicedb.has_permission?(legal_request, 'update', 'jane') ? 'YES' : 'no'}"
+puts "CAN SAM UPDATE?: #{Spicedb.has_permission?(legal_request, 'update', 'sam') ? 'YES' : 'no'}"
+puts
+puts "CAN LINDA CREATE?: #{Spicedb.can?('create', 'legal_request', 'linda', 'org_1') ? 'YES' : 'no'}"
+puts "CAN JANE CREATE?: #{Spicedb.can?('create', 'legal_request', 'jane', 'org_1') ? 'YES' : 'no'}"
+puts "CAN SAM CREATE?: #{Spicedb.can?('create', 'legal_request', 'sam', 'org_1') ? 'YES' : 'no'}"
+puts
+puts "All users with access to legal request req_1: #{Spicedb.get_all_users_with_access_to(legal_request)}"
+puts "All accessors to legal request req_1: #{Spicedb.get_all_accessors_to(legal_request)}"
 
 require "irb"
 IRB.start(__FILE__)
