@@ -11,6 +11,11 @@ module Spicedb
     end
 
     def self.add_permission_to_role(organization_id, product, action, role_id)
+      unless Spicedb.permission_map&.dig(product.to_sym)&.include?(action.to_sym)
+        puts 'INVALID PERMISSION'
+        return
+      end
+
       Spicedb.add_relationship('organization', organization_id, product_permission(product, action), 'role', role_id, 'member')
     end
 
@@ -29,7 +34,7 @@ module Spicedb
     end
 
     def self.read_schema
-      puts Spicedb.client.schema_service.read_schema(Authzed::Api::V1::ReadSchemaRequest.new)
+      Spicedb.client.schema_service.read_schema(Authzed::Api::V1::ReadSchemaRequest.new)
     end
 
     private
@@ -46,7 +51,8 @@ definition organization {
 #{
   Spicedb.permission_map.flat_map do |product, actions|
     actions.map do |action|
-      "relation #{product_permission(product, action)}: role#member"
+      "relation #{product_permission(product, action)}: role#member\n" \
+      "permission #{action}_#{product} = #{product_permission(product, action)}"
     end
   end.join("\n")
 }
@@ -70,7 +76,7 @@ definition group {
            "  relation accessors: user | group#member\n"
 
     perms = actions.map do |action|
-      perm = "permission #{action} = organization->#{product_permission(product, action)}"
+      perm = "permission #{action} = organization->#{action}_#{product}"
       perm += "& accessors" if action != 'create'
       perm
     end.join("\n")

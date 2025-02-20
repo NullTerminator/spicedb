@@ -39,13 +39,16 @@ module Spicedb
     )).map(&:subject_object_id)
   end
 
+  # This exposes a bug in the ruby client for authzed as ReadRelationshipsRequest returns a collection allowing you to
+  # drill into results until you get to an ObjectReference which has an object_id attribute, but that's already an attr
+  # of Object in ruby
   def self.get_all_accessors_to(record)
     client.permissions_service.read_relationships(Authzed::Api::V1::ReadRelationshipsRequest.new(
       consistency: Authzed::Api::V1::Consistency.new(fully_consistent: true),
       relationship_filter: Authzed::Api::V1::RelationshipFilter.new(
         resource_type: underscore(record.class.name),
         optional_resource_id: record.id,
-        optional_relation: "accessors"
+        optional_relation: 'accessors'
       )
     )).map { |r| r.relationship.subject.object }.map { |o| "#{o.object_type}:#{o.object_id}" }
   end

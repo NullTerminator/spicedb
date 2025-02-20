@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+
+require "spicedb"
+require 'spicedb/management'
+
+Spicedb.configure do |c|
+  c.url = "localhost:50051"
+  c.token = "somerandomkeyhere"
+
+  c.permission_map = {
+    tag: [:create, :update, :delete]
+  }
+end
+
+Tag = Struct.new(:id)
+tag1 = Tag.new('tag_1')
+tag2 = Tag.new('tag_2')
+
+schema = begin
+           Spicedb::Management.read_schema
+         rescue GRPC::NotFound
+           nil
+         end
+
+unless schema
+  begin
+    Spicedb::Management.write_schema
+
+    Spicedb::Management.create_role('org_1', 'admin')
+    Spicedb::Management.create_role('org_1', 'viewer')
+
+    Spicedb::Management.create_group('org_1', 'east')
+
+    # Admin perms
+    Spicedb::Management.add_permission_to_role('org_1', 'tag', 'create', 'admin')
+    Spicedb::Management.add_permission_to_role('org_1', 'tag', 'read', 'admin')
+    Spicedb::Management.add_permission_to_role('org_1', 'tag', 'update', 'admin')
+    Spicedb::Management.add_permission_to_role('org_1', 'tag', 'delete', 'admin')
+
+    # Viewer perms
+    Spicedb::Management.add_permission_to_role('org_1', 'tag', 'read', 'viewer')
+
+    # Users
+    Spicedb::Management.add_role_to_user('admin', 'linda')
+    Spicedb::Management.add_role_to_user('admin', 'jane')
+    Spicedb::Management.add_role_to_user('viewer', 'sam')
+
+    Spicedb::Management.add_user_to_group('jane', 'east')
+
+    Spicedb.add_record('org_1', tag1)
+    Spicedb.add_record('org_1', tag2)
+
+    # Grant access to the east group
+    Spicedb.add_access_to_record(tag1, group_id: 'east')
+    Spicedb.add_access_to_record(tag1, user_id: 'linda')
+    Spicedb.add_access_to_record(tag2, user_id: 'linda')
+  rescue StandardError => e
+    #puts "ERROR: #{e}"
+    #puts e.backtrace.first(10)
+  end
+end
+
+puts "CAN LINDA UPDATE tag_1?: #{Spicedb.has_permission?(tag1, 'update', 'linda') ? 'YES' : 'no'}"
+puts "CAN JANE UPDATE tag_1?: #{Spicedb.has_permission?(tag1, 'update', 'jane') ? 'YES' : 'no'}"
+puts "CAN SAM UPDATE tag_1?: #{Spicedb.has_permission?(tag1, 'update', 'sam') ? 'YES' : 'no'}"
+puts
+puts "CAN LINDA UPDATE tag_2?: #{Spicedb.has_permission?(tag2, 'update', 'linda') ? 'YES' : 'no'}"
+puts "CAN JANE UPDATE tag_2?: #{Spicedb.has_permission?(tag2, 'update', 'jane') ? 'YES' : 'no'}"
+puts "CAN SAM UPDATE tag_2?: #{Spicedb.has_permission?(tag2, 'update', 'sam') ? 'YES' : 'no'}"
+puts
+puts "CAN LINDA CREATE TAGS?`: #{Spicedb.can?('create', 'tag', 'linda', 'org_1') ? 'YES' : 'no'}"
+puts "CAN JANE CREATE TAGS?: #{Spicedb.can?('create', 'tag', 'jane', 'org_1') ? 'YES' : 'no'}"
+puts "CAN SAM CREATE TAGS?: #{Spicedb.can?('create', 'tag', 'sam', 'org_1') ? 'YES' : 'no'}"
+puts
+puts "CAN LINDA UPDATE TAGS?: #{Spicedb.can?('update', 'tag', 'linda', 'org_1') ? 'YES' : 'no'}"
+puts
+puts "All users with access to legal request tag_1: #{Spicedb.get_all_users_with_access_to(tag1)}"
+puts "All accessors to legal request tag_1: #{Spicedb.get_all_accessors_to(tag1)}"
+
+require "irb"
+IRB.start(__FILE__)
